@@ -1,0 +1,56 @@
+library(caret) # GridSearch?
+library(caTools) # AUC
+library(ranger) #RandomForest
+
+# Import the raw dataset
+url <- "C:/Users/tedda/Desktop/Data Science Portfolio/Machine Learning/Supervised Learning/Classification/Random Forests on Telecom Churn Data/Raw Datasets/churn_clean.csv"
+churn_data <- read.csv(url, header = TRUE)
+
+# Remove customer demographics by indexing
+churn_dummies <- churn_data[20:50]
+
+# Export entire prepped dataset
+write.csv(churn_dummies, "C:/Users/tedda/Desktop/Data Science Portfolio/Machine Learning/Supervised Learning/Classification/Random Forests on Telecom Churn Data/Cleansed Datasets/prepped_complete_dataset.csv", row.names = FALSE)
+
+# Set seed for random sampling of data
+set.seed(111)
+
+# Create the index for the training dataset
+sample_size <- round(0.8*nrow(churn_dummies))
+train_ind <- sample(1:nrow(churn_dummies), size = sample_size)
+
+# Split the training and testing datasets from the prepped dataset
+churn_train <- churn_dummies[train_ind,]
+write.csv(churn_train, "C:/Users/tedda/Desktop/Data Science Portfolio/Machine Learning/Supervised Learning/Classification/Random Forests on Telecom Churn Data/Cleansed Datasets/train_dataset.csv", row.names = FALSE)
+
+churn_test <- churn_dummies[-train_ind,]
+write.csv(churn_test, "C:/Users/tedda/Desktop/Data Science Portfolio/Machine Learning/Supervised Learning/Classification/Random Forests on Telecom Churn Data/Cleansed Datasets/test_dataset.csv", row.names = FALSE)
+
+# Create the "actual" results datasets for both the training and test datasets
+churn_train_actual <- churn_train[,'Churn']
+churn_test_actual <- churn_test[,'Churn']
+
+# Build the model and hyperparameter tuning grid
+train_ctrl <- trainControl(method = "cv", number = 5, classProbs = TRUE, verboseIter = TRUE)
+tuneGrid <- data.frame(.mtry = sqrt(30),.splitrule = c("gini"), .min.node.size = c(1:10))
+rfc_fit <- train(x = churn_train[-1], y = churn_train_actual, method = "ranger", metric = c("Accuracy"), importance = "impurity", 
+                 tuneGrid = tuneGrid, trControl = train_ctrl)
+
+# Plot the finished model to show Accuracy of each min.node.size
+plot(rfc_fit)
+
+# Save and Load the Model
+model_url <- "C:/Users/tedda/Desktop/Data Science Portfolio/Machine Learning/Supervised Learning/Classification/Random Forests on Telecom Churn Data/Exported Models/RandomForestsModel.rds"
+saveRDS(rfc_fit, model_url)
+rfc_model <- readRDS(model_url)
+
+# Create a confusion matrix to show the Accuracy and other metrics of our final model
+pred <- predict(rfc_model, newdata = churn_test[-1])
+confusionMatrix(pred,as.factor(churn_test$Churn))
+
+# Plot the AUC of our final model
+pred_ROC <- predict(rfc_model, newdata = churn_test[-1], type = "prob")
+colAUC(X = pred_ROC, y = churn_test_actual, plotROC = TRUE)
+
+# Print the importance of the top 20 variables in our model
+varImp(rfc_model)
